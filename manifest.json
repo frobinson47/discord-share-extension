@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Discord Share",
+  "version": "1.0.0",
+  "description": "Send selected text, links, and images to Discord channels",
+  "permissions": ["storage", "contextMenus", "scripting", "activeTab"],
+  "host_permissions": ["https://discord.com/api/webhooks/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options/options.html",
+  "icons": {
+    "128": "icons/icon128.png"
+  }
+}
