@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Discord Share</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="logo">🎮 Discord Share</span>
+      <a href="#" id="settings-link" title="Settings">⚙</a>
+    </header>
+
+    <!-- Empty state (no channels configured) -->
+    <div id="empty-state" class="empty-state hidden">
+      <p>No channels configured yet.</p>
+      <a href="#" id="empty-settings-link" class="btn btn-primary">Open Settings</a>
+    </div>
+
+    <!-- Main UI -->
+    <div id="main-ui" class="hidden">
+      <section class="section">
+        <div class="section-label">SEND TO</div>
+        <div id="channel-list"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-label">CONTENT</div>
+        <div id="content-preview" class="content-preview"></div>
+      </section>
+
+      <section class="section">
+        <textarea id="note-input" placeholder="Add a note..." rows="2"></textarea>
+      </section>
+
+      <div id="error-message" class="error-message hidden"></div>
+
+      <button id="send-btn" class="btn btn-primary send-btn">Send to Discord</button>
+    </div>
+
+    <!-- Success state -->
+    <div id="success-state" class="success-state hidden">
+      <div class="success-icon">✅</div>
+      <p>Sent!</p>
+    </div>
+  </div>
+
+  <script src="../storage.js"></script>
+  <script src="../formatter.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
