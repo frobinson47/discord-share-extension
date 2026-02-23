@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Discord Share — Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎮 Discord Share</h1>
+      <p class="subtitle">Configure your servers and channels</p>
+    </header>
+
+    <div id="servers-list">
+      <!-- Dynamically populated by options.js -->
+    </div>
+
+    <button id="add-server-btn" class="btn btn-primary">+ Add Server</button>
+
+    <div class="footer-actions">
+      <button id="export-btn" class="btn btn-secondary">Export Config</button>
+      <button id="import-btn" class="btn btn-secondary">Import Config</button>
+      <input type="file" id="import-file" accept=".json" style="display:none" />
+    </div>
+
+    <div id="status-message" class="status hidden"></div>
+  </div>
+
+  <script src="../storage.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
