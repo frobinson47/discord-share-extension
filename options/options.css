@@ -137,3 +137,170 @@ header h1 { font-size: 22px; color: #fff; }
 .modal input:focus { outline: none; border-color: #5865f2; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 .modal-error { color: #ed4245; font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+/* ─── Discord Connection Section ─────────────────────────────────────── */
+
+.discord-section {
+  margin-bottom: 20px;
+}
+
+.dev-setup {
+  background: #2b2d31;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.dev-setup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: #96989d;
+}
+.dev-setup-header:hover { color: #dcddde; }
+.dev-setup-header .chevron { font-size: 12px; transition: transform 0.2s; }
+.dev-setup-header .chevron.open { transform: rotate(90deg); }
+
+.dev-setup-body {
+  padding: 0 16px 16px;
+}
+.dev-setup-body.hidden { display: none; }
+
+.dev-setup-hint {
+  font-size: 13px;
+  color: #96989d;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.dev-setup-hint a { color: #5865f2; text-decoration: none; }
+.dev-setup-hint a:hover { text-decoration: underline; }
+
+.dev-setup-body label {
+  display: block;
+  font-size: 13px;
+  color: #96989d;
+  margin-bottom: 4px;
+  margin-top: 10px;
+}
+.dev-setup-body input {
+  width: 100%;
+  background: #1e1f22;
+  border: 1px solid #4e5058;
+  border-radius: 5px;
+  color: #dcddde;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+.dev-setup-body input:focus { outline: none; border-color: #5865f2; }
+
+.dev-setup-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.discord-status { margin-top: 12px; }
+.discord-status.hidden { display: none; }
+
+.discord-hint {
+  font-size: 13px;
+  color: #96989d;
+  margin-top: 6px;
+}
+
+.discord-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.discord-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #4e5058;
+}
+
+.discord-username {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #3f4147;
+  margin: 20px 0;
+}
+
+.guild-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 12px 0;
+}
+
+.guild-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.guild-row:hover { background: #1e1f22; }
+.guild-row.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.guild-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #4e5058;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #fff;
+  overflow: hidden;
+}
+.guild-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guild-name { flex: 1; font-size: 14px; }
+.guild-status { font-size: 12px; color: #96989d; }
+
+.channel-checklist {
+  max-height: 250px;
+  overflow-y: auto;
+  margin: 12px 0;
+}
+
+.channel-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+}
+.channel-check-row:hover { background: #1e1f22; }
+.channel-check-row input[type="checkbox"] { accent-color: #5865f2; }
+.channel-check-row label { cursor: pointer; font-size: 14px; flex: 1; }
+
+.import-progress {
+  font-size: 13px;
+  color: #96989d;
+  margin-top: 8px;
+  min-height: 18px;
+}

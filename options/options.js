@@ -277,6 +277,334 @@ async function importConfig(file) {
   }
 }
 
+// ─── Discord Connection ─────────────────────────────────────────────────
+
+async function renderDiscordSection() {
+  const app = await Storage.getDiscordApp();
+  const auth = await Storage.getDiscordAuth();
+
+  // Dev setup toggle
+  const toggle = document.getElementById('dev-setup-toggle');
+  const body = document.getElementById('dev-setup-body');
+  const chevron = document.getElementById('dev-setup-chevron');
+
+  toggle.addEventListener('click', () => {
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('open');
+  });
+
+  // Pre-fill credentials if saved
+  if (app) {
+    document.getElementById('app-client-id').value = app.clientId || '';
+    document.getElementById('app-client-secret').value = app.clientSecret || '';
+    document.getElementById('app-bot-token').value = app.botToken || '';
+  }
+
+  // Save credentials button
+  document.getElementById('save-app-btn').addEventListener('click', async () => {
+    const clientId = document.getElementById('app-client-id').value.trim();
+    const clientSecret = document.getElementById('app-client-secret').value.trim();
+    const botToken = document.getElementById('app-bot-token').value.trim();
+
+    if (!clientId || !clientSecret || !botToken) {
+      showStatus('All three fields are required.', 'error');
+      return;
+    }
+
+    await Storage.saveDiscordApp({ clientId, clientSecret, botToken });
+    showStatus('Credentials saved!');
+    updateDiscordUI();
+  });
+
+  // Connect button
+  document.getElementById('connect-discord-btn').addEventListener('click', connectDiscord);
+
+  // Disconnect button
+  document.getElementById('disconnect-discord-btn').addEventListener('click', async () => {
+    await Storage.removeDiscordAuth();
+    showStatus('Disconnected from Discord.');
+    updateDiscordUI();
+  });
+
+  // Import server button
+  document.getElementById('import-server-btn').addEventListener('click', importServerFromDiscord);
+
+  updateDiscordUI();
+}
+
+async function updateDiscordUI() {
+  const app = await Storage.getDiscordApp();
+  const auth = await Storage.getDiscordAuth();
+
+  const disconnectedEl = document.getElementById('discord-disconnected');
+  const connectedEl = document.getElementById('discord-connected');
+  const connectBtn = document.getElementById('connect-discord-btn');
+
+  if (auth && auth.accessToken) {
+    // Connected state
+    disconnectedEl.classList.add('hidden');
+    connectedEl.classList.remove('hidden');
+
+    if (auth.user) {
+      const avatarUrl = DiscordAPI.getUserAvatarUrl(auth.user.id, auth.user.avatar);
+      document.getElementById('discord-avatar').src = avatarUrl || '';
+      document.getElementById('discord-avatar').style.display = avatarUrl ? 'block' : 'none';
+      document.getElementById('discord-username').textContent = auth.user.username;
+    }
+  } else {
+    // Disconnected state
+    connectedEl.classList.add('hidden');
+    disconnectedEl.classList.remove('hidden');
+
+    // Enable connect button only if credentials are saved
+    if (app && app.clientId && app.clientSecret) {
+      connectBtn.disabled = false;
+      disconnectedEl.querySelector('.discord-hint').textContent = 'Click to authorize with Discord.';
+    } else {
+      connectBtn.disabled = true;
+      disconnectedEl.querySelector('.discord-hint').textContent = 'Save your app credentials above first.';
+    }
+  }
+}
+
+async function connectDiscord() {
+  const app = await Storage.getDiscordApp();
+  if (!app) return;
+
+  const redirectUri = chrome.identity.getRedirectURL('oauth2');
+  const authorizeUrl = DiscordAPI.getAuthorizeUrl(app.clientId, redirectUri);
+
+  try {
+    const responseUrl = await new Promise((resolve, reject) => {
+      chrome.identity.launchWebAuthFlow(
+        { url: authorizeUrl, interactive: true },
+        (redirectUrl) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(redirectUrl);
+          }
+        }
+      );
+    });
+
+    // Extract code from redirect URL
+    const url = new URL(responseUrl);
+    const code = url.searchParams.get('code');
+    if (!code) throw new Error('No authorization code received');
+
+    // Exchange code for tokens
+    const tokens = await DiscordAPI.exchangeCode(
+      app.clientId, app.clientSecret, code, redirectUri
+    );
+
+    // Fetch user info
+    const user = await DiscordAPI.getCurrentUser(tokens.access_token);
+
+    // Save auth
+    await Storage.saveDiscordAuth({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: Date.now() + tokens.expires_in * 1000,
+      user: { id: user.id, username: user.username, avatar: user.avatar },
+    });
+
+    showStatus(`Connected as ${user.username}!`);
+    updateDiscordUI();
+  } catch (err) {
+    showStatus(`Connection failed: ${err.message}`, 'error');
+  }
+}
+
+async function importServerFromDiscord() {
+  const app = await Storage.getDiscordApp();
+  const accessToken = await DiscordAPI.getValidAccessToken();
+  if (!app || !accessToken) {
+    showStatus('Session expired. Please reconnect Discord.', 'error');
+    updateDiscordUI();
+    return;
+  }
+
+  let guilds;
+  try {
+    guilds = await DiscordAPI.getUserGuilds(accessToken);
+  } catch (err) {
+    showStatus(`Failed to fetch servers: ${err.message}`, 'error');
+    return;
+  }
+
+  // Check which servers are already imported (by name match)
+  const { servers: existingServers } = await Storage.getConfig();
+  const existingNames = new Set(existingServers.map((s) => s.name.toLowerCase()));
+
+  const guildListHtml = guilds
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((g) => {
+      const alreadyImported = existingNames.has(g.name.toLowerCase());
+      const iconUrl = DiscordAPI.getGuildIconUrl(g.id, g.icon);
+      const iconInner = iconUrl
+        ? `<img src="${iconUrl}" alt="" />`
+        : escHtml(g.name.charAt(0).toUpperCase());
+      return `
+        <div class="guild-row ${alreadyImported ? 'disabled' : ''}"
+             data-guild-id="${g.id}" data-guild-name="${escHtml(g.name)}">
+          <div class="guild-icon">${iconInner}</div>
+          <span class="guild-name">${escHtml(g.name)}</span>
+          <span class="guild-status">${alreadyImported ? 'Already imported' : ''}</span>
+        </div>
+      `;
+    })
+    .join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="width:480px;">
+      <h2>Select a Server</h2>
+      <div class="guild-list">${guildListHtml || '<p style="color:#96989d;">No servers found.</p>'}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-cancel>Cancel</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // Handle guild selection
+  overlay.querySelectorAll('.guild-row:not(.disabled)').forEach((row) => {
+    row.addEventListener('click', async () => {
+      overlay.remove();
+      await selectGuildChannels(
+        app,
+        row.dataset.guildId,
+        row.dataset.guildName
+      );
+    });
+  });
+}
+
+async function selectGuildChannels(app, guildId, guildName) {
+  // Try to fetch channels with bot token
+  let channels;
+  try {
+    channels = await DiscordAPI.getGuildTextChannels(app.botToken, guildId);
+  } catch (err) {
+    showStatus(`Failed to fetch channels: ${err.message}`, 'error');
+    return;
+  }
+
+  // Bot not in server
+  if (channels === null) {
+    const inviteUrl = DiscordAPI.getBotInviteUrl(app.clientId, guildId);
+    openModal(`
+      <h2>Bot Required</h2>
+      <p style="color:#96989d;font-size:14px;line-height:1.5;margin-bottom:12px;">
+        The bot needs to be added to <strong>${escHtml(guildName)}</strong> to access channels and create webhooks.
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-cancel>Cancel</button>
+        <button class="btn btn-primary" data-confirm>Add Bot to Server</button>
+      </div>
+    `, (overlay) => {
+      window.open(inviteUrl, '_blank');
+      overlay.remove();
+      showStatus('After adding the bot, click "Import Server" again.', 'success');
+    });
+    return;
+  }
+
+  if (channels.length === 0) {
+    showStatus('No text channels found in this server.', 'error');
+    return;
+  }
+
+  // Show channel checklist
+  const channelListHtml = channels
+    .map((c) => `
+      <div class="channel-check-row">
+        <input type="checkbox" id="ch-${c.id}" value="${c.id}" data-name="${escHtml(c.name)}" />
+        <label for="ch-${c.id}">#${escHtml(c.name)}</label>
+      </div>
+    `)
+    .join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="width:480px;">
+      <h2>Select Channels — ${escHtml(guildName)}</h2>
+      <div class="channel-checklist">${channelListHtml}</div>
+      <p class="import-progress" id="import-progress"></p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-cancel>Cancel</button>
+        <button class="btn btn-primary" id="import-channels-btn">Import Selected</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  overlay.querySelector('#import-channels-btn').addEventListener('click', async () => {
+    const checked = overlay.querySelectorAll('.channel-checklist input:checked');
+    if (checked.length === 0) return;
+
+    const progressEl = overlay.querySelector('#import-progress');
+    const importBtn = overlay.querySelector('#import-channels-btn');
+    importBtn.disabled = true;
+    importBtn.textContent = 'Importing…';
+
+    const newChannels = [];
+    let failed = 0;
+
+    for (let i = 0; i < checked.length; i++) {
+      const input = checked[i];
+      progressEl.textContent = `Creating webhook ${i + 1}/${checked.length}: #${input.dataset.name}…`;
+
+      try {
+        const webhook = await DiscordAPI.createWebhook(app.botToken, input.value);
+        newChannels.push({
+          id: Storage.generateId(),
+          name: `#${input.dataset.name}`,
+          webhookUrl: webhook.url,
+        });
+      } catch (err) {
+        failed++;
+        console.warn(`Failed to create webhook for #${input.dataset.name}:`, err);
+      }
+    }
+
+    if (newChannels.length > 0) {
+      const { servers } = await Storage.getConfig();
+      servers.push({
+        id: Storage.generateId(),
+        name: guildName,
+        channels: newChannels,
+      });
+      await Storage.saveServers(servers);
+      await render();
+      notifyBackground();
+    }
+
+    overlay.remove();
+
+    if (failed > 0) {
+      showStatus(`Imported ${newChannels.length} channels (${failed} failed).`, newChannels.length > 0 ? 'success' : 'error');
+    } else {
+      showStatus(`Imported ${newChannels.length} channels from ${guildName}!`);
+    }
+  });
+}
+
 // ─── Tell background to rebuild context menus ─────────────────────────────
 
 function notifyBackground() {
@@ -287,6 +615,7 @@ function notifyBackground() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await render();
+  await renderDiscordSection();
 
   document.getElementById('add-server-btn').addEventListener('click', addServer);
   document.getElementById('export-btn').addEventListener('click', exportConfig);
