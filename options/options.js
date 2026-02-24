@@ -293,6 +293,16 @@ async function renderDiscordSection() {
     chevron.classList.toggle('open');
   });
 
+  // Show redirect URL so user can copy it into Discord OAuth2 settings
+  const redirectUrlInput = document.getElementById('app-redirect-url');
+  const redirectUrl = chrome.identity.getRedirectURL('oauth2');
+  redirectUrlInput.value = redirectUrl;
+  redirectUrlInput.addEventListener('click', () => {
+    redirectUrlInput.select();
+    navigator.clipboard.writeText(redirectUrl);
+    showStatus('Redirect URL copied to clipboard!');
+  });
+
   // Pre-fill credentials if saved
   if (app) {
     document.getElementById('app-client-id').value = app.clientId || '';

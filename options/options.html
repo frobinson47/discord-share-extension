@@ -22,6 +22,8 @@
         </div>
         <div id="dev-setup-body" class="dev-setup-body hidden">
           <p class="dev-setup-hint">Create a <a href="https://discord.com/developers/applications" target="_blank">Discord Application</a>, enable its Bot, and paste the credentials below.</p>
+          <label>OAuth2 Redirect URL <span style="color:#5865f2;">(copy this into your Discord app's OAuth2 Redirects)</span></label>
+          <input id="app-redirect-url" type="text" readonly style="cursor:pointer;color:#5865f2;" />
           <label>Client ID</label>
           <input id="app-client-id" type="text" placeholder="e.g. 123456789012345678" />
           <label>Client Secret</label>
