@@ -277,6 +277,150 @@ async function importConfig(file) {
   }
 }
 
+// ─── Discord Connection ─────────────────────────────────────────────────
+
+async function renderDiscordSection() {
+  const app = await Storage.getDiscordApp();
+  const auth = await Storage.getDiscordAuth();
+
+  // Dev setup toggle
+  const toggle = document.getElementById('dev-setup-toggle');
+  const body = document.getElementById('dev-setup-body');
+  const chevron = document.getElementById('dev-setup-chevron');
+
+  toggle.addEventListener('click', () => {
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('open');
+  });
+
+  // Pre-fill credentials if saved
+  if (app) {
+    document.getElementById('app-client-id').value = app.clientId || '';
+    document.getElementById('app-client-secret').value = app.clientSecret || '';
+    document.getElementById('app-bot-token').value = app.botToken || '';
+  }
+
+  // Save credentials button
+  document.getElementById('save-app-btn').addEventListener('click', async () => {
+    const clientId = document.getElementById('app-client-id').value.trim();
+    const clientSecret = document.getElementById('app-client-secret').value.trim();
+    const botToken = document.getElementById('app-bot-token').value.trim();
+
+    if (!clientId || !clientSecret || !botToken) {
+      showStatus('All three fields are required.', 'error');
+      return;
+    }
+
+    await Storage.saveDiscordApp({ clientId, clientSecret, botToken });
+    showStatus('Credentials saved!');
+    updateDiscordUI();
+  });
+
+  // Connect button
+  document.getElementById('connect-discord-btn').addEventListener('click', connectDiscord);
+
+  // Disconnect button
+  document.getElementById('disconnect-discord-btn').addEventListener('click', async () => {
+    await Storage.removeDiscordAuth();
+    showStatus('Disconnected from Discord.');
+    updateDiscordUI();
+  });
+
+  // Import server button
+  document.getElementById('import-server-btn').addEventListener('click', importServerFromDiscord);
+
+  updateDiscordUI();
+}
+
+async function updateDiscordUI() {
+  const app = await Storage.getDiscordApp();
+  const auth = await Storage.getDiscordAuth();
+
+  const disconnectedEl = document.getElementById('discord-disconnected');
+  const connectedEl = document.getElementById('discord-connected');
+  const connectBtn = document.getElementById('connect-discord-btn');
+
+  if (auth && auth.accessToken) {
+    // Connected state
+    disconnectedEl.classList.add('hidden');
+    connectedEl.classList.remove('hidden');
+
+    if (auth.user) {
+      const avatarUrl = DiscordAPI.getUserAvatarUrl(auth.user.id, auth.user.avatar);
+      document.getElementById('discord-avatar').src = avatarUrl || '';
+      document.getElementById('discord-avatar').style.display = avatarUrl ? 'block' : 'none';
+      document.getElementById('discord-username').textContent = auth.user.username;
+    }
+  } else {
+    // Disconnected state
+    connectedEl.classList.add('hidden');
+    disconnectedEl.classList.remove('hidden');
+
+    // Enable connect button only if credentials are saved
+    if (app && app.clientId && app.clientSecret) {
+      connectBtn.disabled = false;
+      disconnectedEl.querySelector('.discord-hint').textContent = 'Click to authorize with Discord.';
+    } else {
+      connectBtn.disabled = true;
+      disconnectedEl.querySelector('.discord-hint').textContent = 'Save your app credentials above first.';
+    }
+  }
+}
+
+async function connectDiscord() {
+  const app = await Storage.getDiscordApp();
+  if (!app) return;
+
+  const redirectUri = chrome.identity.getRedirectURL('oauth2');
+  const authorizeUrl = DiscordAPI.getAuthorizeUrl(app.clientId, redirectUri);
+
+  try {
+    const responseUrl = await new Promise((resolve, reject) => {
+      chrome.identity.launchWebAuthFlow(
+        { url: authorizeUrl, interactive: true },
+        (redirectUrl) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(redirectUrl);
+          }
+        }
+      );
+    });
+
+    // Extract code from redirect URL
+    const url = new URL(responseUrl);
+    const code = url.searchParams.get('code');
+    if (!code) throw new Error('No authorization code received');
+
+    // Exchange code for tokens
+    const tokens = await DiscordAPI.exchangeCode(
+      app.clientId, app.clientSecret, code, redirectUri
+    );
+
+    // Fetch user info
+    const user = await DiscordAPI.getCurrentUser(tokens.access_token);
+
+    // Save auth
+    await Storage.saveDiscordAuth({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: Date.now() + tokens.expires_in * 1000,
+      user: { id: user.id, username: user.username, avatar: user.avatar },
+    });
+
+    showStatus(`Connected as ${user.username}!`);
+    updateDiscordUI();
+  } catch (err) {
+    showStatus(`Connection failed: ${err.message}`, 'error');
+  }
+}
+
+// Placeholder — implemented in Task 7
+async function importServerFromDiscord() {
+  showStatus('Import not yet implemented.', 'error');
+}
+
 // ─── Tell background to rebuild context menus ─────────────────────────────
 
 function notifyBackground() {
@@ -287,6 +431,7 @@ function notifyBackground() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await render();
+  await renderDiscordSection();
 
   document.getElementById('add-server-btn').addEventListener('click', addServer);
   document.getElementById('export-btn').addEventListener('click', exportConfig);
