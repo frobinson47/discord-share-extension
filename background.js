@@ -1,5 +1,5 @@
 // background.js
-importScripts('storage.js');
+importScripts('storage.js', 'discord-api.js');
 
 // ─── Context Menu Registration ─────────────────────────────────────────────
 
@@ -97,7 +97,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'SEND_TO_DISCORD') {
     handleSend(message.payload).then(sendResponse);
-    return true; // async response
+    return true;
+  }
+
+  if (message.type === 'DISCORD_API') {
+    handleDiscordApi(message).then(sendResponse).catch(err => sendResponse({ error: err.message }));
+    return true;
   }
 
   return false;
@@ -124,6 +129,96 @@ async function handleSend({ channelId, discordPayload }) {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+}
+
+// ─── Discord Gateway (bypasses Cloudflare HTTP blocking) ─────────────────
+
+function getGuildsViaGateway(botToken) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket('wss://gateway.discord.gg/?v=10&encoding=json');
+    let heartbeatInterval = null;
+    let expectedGuilds = 0;
+    const guilds = [];
+
+    const cleanup = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      try { ws.close(1000); } catch (_) {}
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      if (guilds.length > 0) resolve(guilds);
+      else reject(new Error('Gateway connection timed out'));
+    }, 15000);
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      // Hello — start heartbeat + identify
+      if (data.op === 10) {
+        heartbeatInterval = setInterval(() => {
+          ws.send(JSON.stringify({ op: 1, d: null }));
+        }, data.d.heartbeat_interval);
+
+        ws.send(JSON.stringify({
+          op: 2,
+          d: {
+            token: botToken,
+            intents: 1, // GUILDS (1 << 0)
+            properties: { os: 'windows', browser: 'discord-share', device: 'discord-share' },
+          },
+        }));
+      }
+
+      // READY — note how many guilds to expect
+      if (data.op === 0 && data.t === 'READY') {
+        expectedGuilds = data.d.guilds.length;
+        if (expectedGuilds === 0) {
+          clearTimeout(timeout);
+          cleanup();
+          resolve([]);
+        }
+      }
+
+      // GUILD_CREATE — full guild data including channels
+      if (data.op === 0 && data.t === 'GUILD_CREATE') {
+        const g = data.d;
+        guilds.push({
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          channels: (g.channels || [])
+            .filter(c => c.type === 0)
+            .sort((a, b) => a.position - b.position)
+            .map(c => ({ id: c.id, name: c.name })),
+        });
+
+        if (guilds.length >= expectedGuilds) {
+          clearTimeout(timeout);
+          cleanup();
+          resolve(guilds);
+        }
+      }
+    };
+
+    ws.onerror = () => {
+      clearTimeout(timeout);
+      cleanup();
+      reject(new Error('Gateway connection failed'));
+    };
+  });
+}
+
+// ─── Discord API Proxy ───────────────────────────────────────────────────
+
+async function handleDiscordApi({ method, botToken, guildId, channelId }) {
+  if (method === 'getGuildsWithChannels') {
+    return await getGuildsViaGateway(botToken);
+  }
+  if (method === 'createWebhook') {
+    return await DiscordAPI.createWebhook(botToken, channelId);
+  }
+  throw new Error(`Unknown method: ${method}`);
 }
 
 // ─── Init ──────────────────────────────────────────────────────────────────

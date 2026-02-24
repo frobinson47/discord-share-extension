@@ -277,11 +277,10 @@ async function importConfig(file) {
   }
 }
 
-// ─── Discord Connection ─────────────────────────────────────────────────
+// ─── Discord Bot Setup ──────────────────────────────────────────────────
 
 async function renderDiscordSection() {
   const app = await Storage.getDiscordApp();
-  const auth = await Storage.getDiscordAuth();
 
   // Dev setup toggle
   const toggle = document.getElementById('dev-setup-toggle');
@@ -293,153 +292,65 @@ async function renderDiscordSection() {
     chevron.classList.toggle('open');
   });
 
-  // Show redirect URL so user can copy it into Discord OAuth2 settings
-  const redirectUrlInput = document.getElementById('app-redirect-url');
-  const redirectUrl = chrome.identity.getRedirectURL('oauth2');
-  redirectUrlInput.value = redirectUrl;
-  redirectUrlInput.addEventListener('click', () => {
-    redirectUrlInput.select();
-    navigator.clipboard.writeText(redirectUrl);
-    showStatus('Redirect URL copied to clipboard!');
-  });
-
-  // Pre-fill credentials if saved
+  // Pre-fill bot token if saved
   if (app) {
-    document.getElementById('app-client-id').value = app.clientId || '';
-    document.getElementById('app-client-secret').value = app.clientSecret || '';
     document.getElementById('app-bot-token').value = app.botToken || '';
   }
 
-  // Save credentials button
-  document.getElementById('save-app-btn').addEventListener('click', async () => {
-    const clientId = document.getElementById('app-client-id').value.trim();
-    const clientSecret = document.getElementById('app-client-secret').value.trim();
+  // Save bot token button
+  document.getElementById('save-bot-btn').addEventListener('click', async () => {
     const botToken = document.getElementById('app-bot-token').value.trim();
 
-    if (!clientId || !clientSecret || !botToken) {
-      showStatus('All three fields are required.', 'error');
+    if (!botToken) {
+      showStatus('Bot token is required.', 'error');
       return;
     }
 
-    await Storage.saveDiscordApp({ clientId, clientSecret, botToken });
-    showStatus('Credentials saved!');
-    updateDiscordUI();
-  });
-
-  // Connect button
-  document.getElementById('connect-discord-btn').addEventListener('click', connectDiscord);
-
-  // Disconnect button
-  document.getElementById('disconnect-discord-btn').addEventListener('click', async () => {
-    await Storage.removeDiscordAuth();
-    showStatus('Disconnected from Discord.');
-    updateDiscordUI();
+    await Storage.saveDiscordApp({ botToken });
+    showStatus('Bot token saved!');
+    updateBotUI();
   });
 
   // Import server button
   document.getElementById('import-server-btn').addEventListener('click', importServerFromDiscord);
 
-  updateDiscordUI();
+  updateBotUI();
 }
 
-async function updateDiscordUI() {
-  const app = await Storage.getDiscordApp();
-  const auth = await Storage.getDiscordAuth();
-
-  const disconnectedEl = document.getElementById('discord-disconnected');
-  const connectedEl = document.getElementById('discord-connected');
-  const connectBtn = document.getElementById('connect-discord-btn');
-
-  if (auth && auth.accessToken) {
-    // Connected state
-    disconnectedEl.classList.add('hidden');
-    connectedEl.classList.remove('hidden');
-
-    if (auth.user) {
-      const avatarUrl = DiscordAPI.getUserAvatarUrl(auth.user.id, auth.user.avatar);
-      document.getElementById('discord-avatar').src = avatarUrl || '';
-      document.getElementById('discord-avatar').style.display = avatarUrl ? 'block' : 'none';
-      document.getElementById('discord-username').textContent = auth.user.username;
-    }
-  } else {
-    // Disconnected state
-    connectedEl.classList.add('hidden');
-    disconnectedEl.classList.remove('hidden');
-
-    // Enable connect button only if credentials are saved
-    if (app && app.clientId && app.clientSecret) {
-      connectBtn.disabled = false;
-      disconnectedEl.querySelector('.discord-hint').textContent = 'Click to authorize with Discord.';
+function updateBotUI() {
+  Storage.getDiscordApp().then((app) => {
+    const actionsEl = document.getElementById('bot-actions');
+    if (app && app.botToken) {
+      actionsEl.classList.remove('hidden');
     } else {
-      connectBtn.disabled = true;
-      disconnectedEl.querySelector('.discord-hint').textContent = 'Save your app credentials above first.';
+      actionsEl.classList.add('hidden');
     }
-  }
-}
-
-async function connectDiscord() {
-  const app = await Storage.getDiscordApp();
-  if (!app) return;
-
-  const redirectUri = chrome.identity.getRedirectURL('oauth2');
-  const authorizeUrl = DiscordAPI.getAuthorizeUrl(app.clientId, redirectUri);
-
-  try {
-    const responseUrl = await new Promise((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow(
-        { url: authorizeUrl, interactive: true },
-        (redirectUrl) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(redirectUrl);
-          }
-        }
-      );
-    });
-
-    // Extract code from redirect URL
-    const url = new URL(responseUrl);
-    const code = url.searchParams.get('code');
-    if (!code) throw new Error('No authorization code received');
-
-    // Exchange code for tokens
-    const tokens = await DiscordAPI.exchangeCode(
-      app.clientId, app.clientSecret, code, redirectUri
-    );
-
-    // Fetch user info
-    const user = await DiscordAPI.getCurrentUser(tokens.access_token);
-
-    // Save auth
-    await Storage.saveDiscordAuth({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: Date.now() + tokens.expires_in * 1000,
-      user: { id: user.id, username: user.username, avatar: user.avatar },
-    });
-
-    showStatus(`Connected as ${user.username}!`);
-    updateDiscordUI();
-  } catch (err) {
-    showStatus(`Connection failed: ${err.message}`, 'error');
-  }
+  });
 }
 
 async function importServerFromDiscord() {
   const app = await Storage.getDiscordApp();
-  const accessToken = await DiscordAPI.getValidAccessToken();
-  if (!app || !accessToken) {
-    showStatus('Session expired. Please reconnect Discord.', 'error');
-    updateDiscordUI();
+  if (!app || !app.botToken) {
+    showStatus('Save your bot token first.', 'error');
     return;
   }
 
+  showStatus('Connecting to Discord Gateway…', 'success');
+
   let guilds;
   try {
-    guilds = await DiscordAPI.getUserGuilds(accessToken);
+    const result = await chrome.runtime.sendMessage({
+      type: 'DISCORD_API', method: 'getGuildsWithChannels', botToken: app.botToken,
+    });
+    if (result.error) throw new Error(result.error);
+    guilds = result;
   } catch (err) {
     showStatus(`Failed to fetch servers: ${err.message}`, 'error');
+    return;
+  }
+
+  if (!guilds.length) {
+    showStatus('Bot is not in any servers. Add it to a server first.', 'error');
     return;
   }
 
@@ -471,7 +382,7 @@ async function importServerFromDiscord() {
   overlay.innerHTML = `
     <div class="modal" style="width:480px;">
       <h2>Select a Server</h2>
-      <div class="guild-list">${guildListHtml || '<p style="color:#96989d;">No servers found.</p>'}</div>
+      <div class="guild-list">${guildListHtml}</div>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-cancel>Cancel</button>
       </div>
@@ -485,48 +396,39 @@ async function importServerFromDiscord() {
     if (e.target === overlay) overlay.remove();
   });
 
-  // Handle guild selection
+  // Handle guild selection — channels already included from Gateway
   overlay.querySelectorAll('.guild-row:not(.disabled)').forEach((row) => {
     row.addEventListener('click', async () => {
       overlay.remove();
-      await selectGuildChannels(
-        app,
-        row.dataset.guildId,
-        row.dataset.guildName
-      );
+      const guild = guilds.find(g => g.id === row.dataset.guildId);
+      await selectGuildChannels(app, guild);
     });
   });
 }
 
-async function selectGuildChannels(app, guildId, guildName) {
-  // Try to fetch channels with bot token
-  let channels;
-  try {
-    channels = await DiscordAPI.getGuildTextChannels(app.botToken, guildId);
-  } catch (err) {
-    showStatus(`Failed to fetch channels: ${err.message}`, 'error');
+function promptForBotInvite(app) {
+  const clientId = DiscordAPI.getClientIdFromToken(app.botToken);
+  if (!clientId) {
+    showStatus('Could not extract client ID from bot token.', 'error');
     return;
   }
+  const inviteUrl = DiscordAPI.getBotInviteUrl(clientId);
+  openModal(`
+    <h2>Add Bot to a Server</h2>
+    <p style="color:#96989d;font-size:13px;line-height:1.5;margin-bottom:12px;">
+      Your bot isn't in any servers yet. Use the link below to add it, then try importing again.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" data-cancel>Cancel</button>
+      <a href="${inviteUrl}" target="_blank" class="btn btn-primary" data-cancel>Add Bot to Server</a>
+    </div>
+  `, () => {});
+}
 
-  // Bot not in server
-  if (channels === null) {
-    const inviteUrl = DiscordAPI.getBotInviteUrl(app.clientId, guildId);
-    openModal(`
-      <h2>Bot Required</h2>
-      <p style="color:#96989d;font-size:14px;line-height:1.5;margin-bottom:12px;">
-        The bot needs to be added to <strong>${escHtml(guildName)}</strong> to access channels and create webhooks.
-      </p>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" data-cancel>Cancel</button>
-        <button class="btn btn-primary" data-confirm>Add Bot to Server</button>
-      </div>
-    `, (overlay) => {
-      window.open(inviteUrl, '_blank');
-      overlay.remove();
-      showStatus('After adding the bot, click "Import Server" again.', 'success');
-    });
-    return;
-  }
+async function selectGuildChannels(app, guild) {
+  const guildId = guild.id;
+  const guildName = guild.name;
+  const channels = guild.channels || [];
 
   if (channels.length === 0) {
     showStatus('No text channels found in this server.', 'error');
@@ -538,7 +440,7 @@ async function selectGuildChannels(app, guildId, guildName) {
     .map((c) => `
       <div class="channel-check-row">
         <input type="checkbox" id="ch-${c.id}" value="${c.id}" data-name="${escHtml(c.name)}" />
-        <label for="ch-${c.id}">#${escHtml(c.name)}</label>
+        <label for="ch-${c.id}"><span class="channel-hash">#</span>${escHtml(c.name)}</label>
       </div>
     `)
     .join('');
@@ -546,13 +448,18 @@ async function selectGuildChannels(app, guildId, guildName) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="width:480px;">
-      <h2>Select Channels — ${escHtml(guildName)}</h2>
+    <div class="modal channel-select-modal">
+      <h2>Select Channels</h2>
+      <p class="channel-select-server">${escHtml(guildName)}</p>
+      <div class="channel-select-toolbar">
+        <button class="btn-link" id="select-all-btn">Select all</button>
+        <span class="channel-count"><span id="checked-count">0</span> / ${channels.length} selected</span>
+      </div>
       <div class="channel-checklist">${channelListHtml}</div>
       <p class="import-progress" id="import-progress"></p>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-cancel>Cancel</button>
-        <button class="btn btn-primary" id="import-channels-btn">Import Selected</button>
+        <button class="btn btn-primary" id="import-channels-btn" disabled>Import Selected</button>
       </div>
     </div>
   `;
@@ -564,54 +471,167 @@ async function selectGuildChannels(app, guildId, guildName) {
     if (e.target === overlay) overlay.remove();
   });
 
-  overlay.querySelector('#import-channels-btn').addEventListener('click', async () => {
+  // Select all / none toggle
+  const selectAllBtn = overlay.querySelector('#select-all-btn');
+  const checkedCountEl = overlay.querySelector('#checked-count');
+  const importBtn = overlay.querySelector('#import-channels-btn');
+  const allCheckboxes = overlay.querySelectorAll('.channel-checklist input[type="checkbox"]');
+
+  function updateCount() {
+    const count = overlay.querySelectorAll('.channel-checklist input:checked').length;
+    checkedCountEl.textContent = count;
+    importBtn.disabled = count === 0;
+    selectAllBtn.textContent = count === allCheckboxes.length ? 'Select none' : 'Select all';
+  }
+
+  selectAllBtn.addEventListener('click', () => {
+    const allChecked = overlay.querySelectorAll('.channel-checklist input:checked').length === allCheckboxes.length;
+    allCheckboxes.forEach(cb => { cb.checked = !allChecked; });
+    updateCount();
+  });
+
+  allCheckboxes.forEach(cb => cb.addEventListener('change', updateCount));
+
+  importBtn.addEventListener('click', async () => {
     const checked = overlay.querySelectorAll('.channel-checklist input:checked');
     if (checked.length === 0) return;
 
     const progressEl = overlay.querySelector('#import-progress');
-    const importBtn = overlay.querySelector('#import-channels-btn');
     importBtn.disabled = true;
     importBtn.textContent = 'Importing…';
 
-    const newChannels = [];
-    let failed = 0;
+    const selectedChannels = Array.from(checked).map(input => ({
+      channelId: input.value,
+      name: input.dataset.name,
+    }));
 
-    for (let i = 0; i < checked.length; i++) {
-      const input = checked[i];
-      progressEl.textContent = `Creating webhook ${i + 1}/${checked.length}: #${input.dataset.name}…`;
+    // Try auto-creating webhooks via bot API
+    const newChannels = [];
+    const failedChannels = [];
+
+    for (let i = 0; i < selectedChannels.length; i++) {
+      const ch = selectedChannels[i];
+      progressEl.textContent = `Creating webhook ${i + 1}/${selectedChannels.length}: #${ch.name}…`;
 
       try {
-        const webhook = await DiscordAPI.createWebhook(app.botToken, input.value);
+        const webhook = await chrome.runtime.sendMessage({
+          type: 'DISCORD_API', method: 'createWebhook', botToken: app.botToken, channelId: ch.channelId,
+        });
+        if (webhook.error) throw new Error(webhook.error);
         newChannels.push({
           id: Storage.generateId(),
-          name: `#${input.dataset.name}`,
+          name: `#${ch.name}`,
           webhookUrl: webhook.url,
         });
       } catch (err) {
-        failed++;
-        console.warn(`Failed to create webhook for #${input.dataset.name}:`, err);
+        failedChannels.push(ch);
+        // If first channel fails, skip trying the rest — likely all blocked
+        if (i === 0 && selectedChannels.length > 1) {
+          failedChannels.push(...selectedChannels.slice(1));
+          break;
+        }
       }
-    }
-
-    if (newChannels.length > 0) {
-      const { servers } = await Storage.getConfig();
-      servers.push({
-        id: Storage.generateId(),
-        name: guildName,
-        channels: newChannels,
-      });
-      await Storage.saveServers(servers);
-      await render();
-      notifyBackground();
     }
 
     overlay.remove();
 
-    if (failed > 0) {
-      showStatus(`Imported ${newChannels.length} channels (${failed} failed).`, newChannels.length > 0 ? 'success' : 'error');
+    // If some/all failed, show manual webhook entry
+    if (failedChannels.length > 0) {
+      if (newChannels.length > 0) {
+        // Save the ones that succeeded first
+        const { servers } = await Storage.getConfig();
+        servers.push({ id: Storage.generateId(), name: guildName, channels: newChannels });
+        await Storage.saveServers(servers);
+        await render();
+        notifyBackground();
+      }
+      showManualWebhookEntry(guildName, failedChannels, newChannels.length);
     } else {
+      // All succeeded
+      const { servers } = await Storage.getConfig();
+      servers.push({ id: Storage.generateId(), name: guildName, channels: newChannels });
+      await Storage.saveServers(servers);
+      await render();
+      notifyBackground();
       showStatus(`Imported ${newChannels.length} channels from ${guildName}!`);
     }
+  });
+}
+
+function showManualWebhookEntry(guildName, failedChannels, alreadyImported) {
+  const channelFieldsHtml = failedChannels.map((ch, i) => `
+    <div class="manual-webhook-row">
+      <label for="wh-${i}"><span class="channel-hash">#</span>${escHtml(ch.name)}</label>
+      <input id="wh-${i}" type="url" placeholder="https://discord.com/api/webhooks/..." data-name="${escHtml(ch.name)}" />
+    </div>
+  `).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal channel-select-modal">
+      <h2>Paste Webhook URLs</h2>
+      <p class="manual-webhook-hint">
+        Auto-creation was blocked. For each channel, create a webhook manually in
+        Discord: <strong>Channel Settings → Integrations → Webhooks → New Webhook</strong>,
+        then copy the URL and paste it below.
+      </p>
+      ${alreadyImported > 0 ? `<p class="manual-webhook-note">${alreadyImported} channel(s) imported successfully. ${failedChannels.length} remaining:</p>` : ''}
+      <div class="manual-webhook-list">${channelFieldsHtml}</div>
+      <p class="modal-error" id="manual-webhook-error"></p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-cancel>Cancel</button>
+        <button class="btn btn-primary" id="save-webhooks-btn">Save</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  overlay.querySelector('#save-webhooks-btn').addEventListener('click', async () => {
+    const inputs = overlay.querySelectorAll('.manual-webhook-list input');
+    const errorEl = overlay.querySelector('#manual-webhook-error');
+    const newChannels = [];
+
+    for (const input of inputs) {
+      const url = input.value.trim();
+      if (!url) continue; // skip empty — user may only fill some
+      if (!url.startsWith('https://discord.com/api/webhooks/')) {
+        errorEl.textContent = `Invalid URL for #${input.dataset.name}. Must start with https://discord.com/api/webhooks/`;
+        input.focus();
+        return;
+      }
+      newChannels.push({
+        id: Storage.generateId(),
+        name: `#${input.dataset.name}`,
+        webhookUrl: url,
+      });
+    }
+
+    if (newChannels.length === 0) {
+      errorEl.textContent = 'Paste at least one webhook URL.';
+      return;
+    }
+
+    // Add to existing server if we already partially imported, or create new
+    const { servers } = await Storage.getConfig();
+    const existingServer = servers.find(s => s.name === guildName);
+    if (existingServer) {
+      existingServer.channels.push(...newChannels);
+    } else {
+      servers.push({ id: Storage.generateId(), name: guildName, channels: newChannels });
+    }
+    await Storage.saveServers(servers);
+    await render();
+    notifyBackground();
+
+    overlay.remove();
+    showStatus(`Saved ${newChannels.length} channels!`);
   });
 }
 

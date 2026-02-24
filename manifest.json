@@ -3,7 +3,7 @@
   "name": "Discord Share",
   "version": "1.0.0",
   "description": "Send selected text, links, and images to Discord channels",
-  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "tabs", "identity"],
+  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "tabs"],
   "host_permissions": ["https://discord.com/api/webhooks/*", "https://discord.com/api/*"],
   "background": {
     "service_worker": "background.js"

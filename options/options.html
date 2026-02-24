@@ -12,44 +12,26 @@
       <p class="subtitle">Configure your servers and channels</p>
     </header>
 
-    <!-- Discord Connection -->
+    <!-- Discord Bot Setup -->
     <div id="discord-section" class="discord-section">
-      <!-- Developer Setup (collapsible) -->
       <div id="dev-setup" class="dev-setup">
         <div class="dev-setup-header" id="dev-setup-toggle">
           <span class="chevron" id="dev-setup-chevron">▶</span>
-          <span>Developer Setup</span>
+          <span>Bot Setup</span>
         </div>
         <div id="dev-setup-body" class="dev-setup-body hidden">
-          <p class="dev-setup-hint">Create a <a href="https://discord.com/developers/applications" target="_blank">Discord Application</a>, enable its Bot, and paste the credentials below.</p>
-          <label>OAuth2 Redirect URL <span style="color:#5865f2;">(copy this into your Discord app's OAuth2 Redirects)</span></label>
-          <input id="app-redirect-url" type="text" readonly style="cursor:pointer;color:#5865f2;" />
-          <label>Client ID</label>
-          <input id="app-client-id" type="text" placeholder="e.g. 123456789012345678" />
-          <label>Client Secret</label>
-          <input id="app-client-secret" type="password" placeholder="e.g. abcdef..." />
+          <p class="dev-setup-hint">Create a <a href="https://discord.com/developers/applications" target="_blank">Discord Application</a>, enable its Bot, and paste the token below. The bot needs <strong>Manage Webhooks</strong> permission.</p>
           <label>Bot Token</label>
           <input id="app-bot-token" type="password" placeholder="e.g. MTIz..." />
           <div class="dev-setup-actions">
-            <button id="save-app-btn" class="btn btn-primary btn-small">Save Credentials</button>
+            <button id="save-bot-btn" class="btn btn-primary btn-small">Save Token</button>
           </div>
         </div>
       </div>
 
-      <!-- Not connected state -->
-      <div id="discord-disconnected" class="discord-status hidden">
-        <button id="connect-discord-btn" class="btn btn-primary" disabled>Connect Discord</button>
-        <p class="discord-hint">Save your app credentials above first.</p>
-      </div>
-
-      <!-- Connected state -->
-      <div id="discord-connected" class="discord-status hidden">
-        <div class="discord-user-info">
-          <img id="discord-avatar" class="discord-avatar" src="" alt="" />
-          <span id="discord-username" class="discord-username"></span>
-          <button id="disconnect-discord-btn" class="btn btn-small btn-secondary">Disconnect</button>
-        </div>
+      <div id="bot-actions" class="discord-status hidden">
         <button id="import-server-btn" class="btn btn-primary">Import Server from Discord</button>
+        <p class="discord-hint">Uses your bot to discover servers and create webhooks.</p>
       </div>
     </div>
 
