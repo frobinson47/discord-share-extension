@@ -317,6 +317,41 @@ async function renderDiscordSection() {
   updateBotUI();
 }
 
+// ─── Prompt House ───────────────────────────────────────────────────────
+
+async function renderPromptHouseSection() {
+  const toggle = document.getElementById('prompthouse-toggle');
+  const body = document.getElementById('prompthouse-body');
+  const chevron = document.getElementById('prompthouse-chevron');
+
+  toggle.addEventListener('click', () => {
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('open');
+  });
+
+  const config = await Storage.getPromptHouse();
+  const keyInput = document.getElementById('ph-api-key');
+  const endpointInput = document.getElementById('ph-endpoint');
+
+  if (config) {
+    keyInput.value = config.apiKey;
+    endpointInput.value = config.endpoint;
+  }
+
+  document.getElementById('ph-save-btn').addEventListener('click', async () => {
+    const apiKey = keyInput.value.trim();
+    const endpoint = endpointInput.value.trim() || 'https://prompthouse.fmrdigital.dev/api/capture';
+
+    if (!apiKey) {
+      showStatus('API key is required.', 'error');
+      return;
+    }
+
+    await Storage.savePromptHouse({ apiKey, endpoint });
+    showStatus('Prompt House settings saved!');
+  });
+}
+
 function updateBotUI() {
   Storage.getDiscordApp().then((app) => {
     const actionsEl = document.getElementById('bot-actions');
@@ -646,6 +681,7 @@ function notifyBackground() {
 document.addEventListener('DOMContentLoaded', async () => {
   await render();
   await renderDiscordSection();
+  await renderPromptHouseSection();
 
   document.getElementById('add-server-btn').addEventListener('click', addServer);
   document.getElementById('export-btn').addEventListener('click', exportConfig);

@@ -6,6 +6,13 @@ importScripts('storage.js', 'discord-api.js');
 async function buildContextMenus() {
   await chrome.contextMenus.removeAll();
 
+  // Prompt House — save selected text (independent of Discord config)
+  chrome.contextMenus.create({
+    id: 'prompthouse-save',
+    title: 'Save to Prompt House',
+    contexts: ['selection'],
+  });
+
   const { servers } = await Storage.getConfig();
   if (!servers.length) return;
 
@@ -41,6 +48,11 @@ async function buildContextMenus() {
 // ─── Context Menu Click Handler ────────────────────────────────────────────
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'prompthouse-save') {
+    await savePromptHouse(info, tab);
+    return;
+  }
+
   if (!info.menuItemId.startsWith('channel-')) return;
 
   const channelId = info.menuItemId.replace('channel-', '');
@@ -86,6 +98,52 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // Open the popup
   await chrome.action.openPopup();
 });
+
+// ─── Prompt House ──────────────────────────────────────────────────────────
+
+function notify(title, message) {
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icons/icon128.png',
+    title,
+    message,
+  });
+}
+
+async function savePromptHouse(info, _tab) {
+  const content = (info.selectionText || '').trim();
+  if (!content) {
+    notify('Prompt House', 'No text selected.');
+    return;
+  }
+
+  const config = await Storage.getPromptHouse();
+  if (!config) {
+    notify('Prompt House', 'Set your API key in the extension options first.');
+    return;
+  }
+
+  try {
+    const res = await fetch(config.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': config.apiKey,
+      },
+      body: JSON.stringify({ content, source: 'web' }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      notify('Prompt House — Failed', `HTTP ${res.status}: ${text.slice(0, 120)}`);
+      return;
+    }
+
+    notify('Prompt House', 'Prompt saved.');
+  } catch (err) {
+    notify('Prompt House — Failed', err.message);
+  }
+}
 
 // ─── Message Listener ──────────────────────────────────────────────────────
 

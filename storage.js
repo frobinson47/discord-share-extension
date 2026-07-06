@@ -84,4 +84,26 @@ const Storage = {
       chrome.storage.sync.remove('discordAuth', resolve);
     });
   },
+
+  // ─── Prompt House ─────────────────────────────────────────────────────
+
+  // Returns { apiKey, endpoint } or null. endpoint falls back to the default.
+  async getPromptHouse() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(['promptHouse'], (result) => {
+        const ph = result.promptHouse;
+        if (!ph || !ph.apiKey) return resolve(null);
+        resolve({
+          apiKey: ph.apiKey,
+          endpoint: ph.endpoint || 'https://prompthouse.fmrdigital.dev/api/capture',
+        });
+      });
+    });
+  },
+
+  async savePromptHouse(promptHouse) {
+    return new Promise((resolve) => {
+      chrome.storage.sync.set({ promptHouse }, resolve);
+    });
+  },
 };
