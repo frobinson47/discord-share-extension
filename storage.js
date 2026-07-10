@@ -88,15 +88,16 @@ const Storage = {
   // ─── Prompt House ─────────────────────────────────────────────────────
 
   // Returns { apiKey, endpoint } or null. endpoint falls back to the default.
+  // Prompt House's full create endpoint is /api/prompts (title/description/status/type/etc).
+  // /api/capture is the older minimal endpoint that only takes raw content.
   async getPromptHouse() {
     return new Promise((resolve) => {
       chrome.storage.sync.get(['promptHouse'], (result) => {
         const ph = result.promptHouse;
         if (!ph || !ph.apiKey) return resolve(null);
-        resolve({
-          apiKey: ph.apiKey,
-          endpoint: ph.endpoint || 'https://prompthouse.fmrdigital.dev/api/capture',
-        });
+        let endpoint = ph.endpoint || 'https://prompthouse.fmrdigital.dev/api/prompts';
+        if (endpoint.endsWith('/api/capture')) endpoint = endpoint.replace('/api/capture', '/api/prompts');
+        resolve({ apiKey: ph.apiKey, endpoint });
       });
     });
   },

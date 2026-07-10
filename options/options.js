@@ -340,7 +340,7 @@ async function renderPromptHouseSection() {
 
   document.getElementById('ph-save-btn').addEventListener('click', async () => {
     const apiKey = keyInput.value.trim();
-    const endpoint = endpointInput.value.trim() || 'https://prompthouse.fmrdigital.dev/api/capture';
+    const endpoint = endpointInput.value.trim() || 'https://prompthouse.fmrdigital.dev/api/prompts';
 
     if (!apiKey) {
       showStatus('API key is required.', 'error');

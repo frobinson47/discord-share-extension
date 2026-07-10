@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Save to Prompt House</title>
+  <link rel="stylesheet" href="prompthouse.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="logo">📚 Save to Prompt House</span>
+    </header>
+
+    <div id="form-ui">
+      <label for="ph-title">Title</label>
+      <input id="ph-title" type="text" placeholder="Short, descriptive title" />
+
+      <label for="ph-content">Prompt content</label>
+      <textarea id="ph-content" rows="6"></textarea>
+
+      <label for="ph-description">Description</label>
+      <textarea id="ph-description" rows="2" placeholder="What this prompt does..."></textarea>
+
+      <label for="ph-usage">Usage examples</label>
+      <textarea id="ph-usage" rows="2" placeholder="One example per line..."></textarea>
+
+      <label for="ph-tags">Tags</label>
+      <input id="ph-tags" type="text" placeholder="comma, separated, tags" />
+
+      <div class="row">
+        <div class="col">
+          <label for="ph-status">Status</label>
+          <select id="ph-status">
+            <option value="active" selected>Active</option>
+            <option value="draft">Draft</option>
+          </select>
+        </div>
+        <div class="col">
+          <label for="ph-type">Type</label>
+          <select id="ph-type">
+            <option value="task" selected>Task</option>
+            <option value="system">System</option>
+            <option value="template">Template</option>
+            <option value="chain">Chain</option>
+            <option value="reference">Reference</option>
+            <option value="snippet">Snippet</option>
+            <option value="image">Image</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="error-message" class="error-message hidden"></div>
+
+      <div class="actions">
+        <button id="cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button id="save-btn" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+
+    <div id="success-state" class="success-state hidden">
+      <div class="success-icon">✅</div>
+      <p>Saved to Prompt House!</p>
+    </div>
+  </div>
+
+  <script src="prompthouse.js"></script>
+</body>
+</html>

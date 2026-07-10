@@ -13,6 +13,13 @@ async function buildContextMenus() {
     contexts: ['selection'],
   });
 
+  // Prompt House — insert a saved prompt into the focused field
+  chrome.contextMenus.create({
+    id: 'prompthouse-insert',
+    title: 'Insert Prompt from Prompt House',
+    contexts: ['editable'],
+  });
+
   const { servers } = await Storage.getConfig();
   if (!servers.length) return;
 
@@ -49,7 +56,12 @@ async function buildContextMenus() {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'prompthouse-save') {
-    await savePromptHouse(info, tab);
+    await openPromptHouseCapture(info, tab);
+    return;
+  }
+
+  if (info.menuItemId === 'prompthouse-insert') {
+    await openPromptHouseInsert(tab, info);
     return;
   }
 
@@ -110,7 +122,7 @@ function notify(title, message) {
   });
 }
 
-async function savePromptHouse(info, _tab) {
+async function openPromptHouseCapture(info, tab) {
   const content = (info.selectionText || '').trim();
   if (!content) {
     notify('Prompt House', 'No text selected.');
@@ -123,6 +135,109 @@ async function savePromptHouse(info, _tab) {
     return;
   }
 
+  let hostname = '';
+  try {
+    hostname = new URL(tab?.url || '').hostname.replace(/^www\./, '');
+  } catch (_) {
+    // non-http pages (chrome://, file://, etc.) — leave untagged
+  }
+
+  await chrome.storage.session.set({
+    promptHouseCapture: { content, tags: hostname ? [hostname] : [] },
+  });
+  await chrome.windows.create({
+    url: chrome.runtime.getURL('prompthouse/prompthouse.html'),
+    type: 'popup',
+    width: 420,
+    height: 640,
+  });
+}
+
+async function openPromptHouseInsert(tab, info) {
+  const config = await Storage.getPromptHouse();
+  if (!config) {
+    notify('Prompt House', 'Set your API key in the extension options first.');
+    return;
+  }
+
+  await chrome.storage.session.set({
+    promptHouseInsertTarget: { tabId: tab.id, frameId: info.frameId || 0 },
+  });
+  await chrome.windows.create({
+    url: chrome.runtime.getURL('prompthouse/insert.html'),
+    type: 'popup',
+    width: 420,
+    height: 560,
+  });
+}
+
+async function searchPromptHouse(query) {
+  const config = await Storage.getPromptHouse();
+  if (!config) return { ok: false, error: 'Set your API key in the extension options first.' };
+
+  try {
+    const url = new URL(config.endpoint);
+    if (query) url.searchParams.set('q', query);
+    url.searchParams.set('sort', 'updated_at');
+    url.searchParams.set('order', 'desc');
+    url.searchParams.set('limit', '20');
+
+    const res = await fetch(url, { headers: { 'X-Api-Key': config.apiKey } });
+    if (!res.ok) {
+      const text = await res.text();
+      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+    }
+    const json = await res.json();
+    return { ok: true, prompts: json.data || [] };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+function insertTextAtCursor(text) {
+  const el = document.activeElement;
+  if (!el) return false;
+
+  const isTextInput = el.tagName === 'TEXTAREA' ||
+    (el.tagName === 'INPUT' && /^(text|search|url|tel|email)$/.test(el.type));
+
+  if (isTextInput) {
+    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement : window.HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(proto.prototype, 'value').set;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    setter.call(el, el.value.slice(0, start) + text + el.value.slice(end));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.selectionStart = el.selectionEnd = start + text.length;
+    return true;
+  }
+
+  if (el.isContentEditable) {
+    document.execCommand('insertText', false, text);
+    return true;
+  }
+
+  return false;
+}
+
+async function insertPromptHouseContent({ tabId, frameId, content }) {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId || 0] },
+      func: insertTextAtCursor,
+      args: [content],
+    });
+    if (!result?.result) return { ok: false, error: 'No editable field is focused on that page.' };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function submitPromptHouse(fields) {
+  const config = await Storage.getPromptHouse();
+  if (!config) return { ok: false, error: 'Set your API key in the extension options first.' };
+
   try {
     const res = await fetch(config.endpoint, {
       method: 'POST',
@@ -130,18 +245,18 @@ async function savePromptHouse(info, _tab) {
         'Content-Type': 'application/json',
         'X-Api-Key': config.apiKey,
       },
-      body: JSON.stringify({ content, source: 'web' }),
+      body: JSON.stringify(fields),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      notify('Prompt House — Failed', `HTTP ${res.status}: ${text.slice(0, 120)}`);
-      return;
+      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
     }
 
     notify('Prompt House', 'Prompt saved.');
+    return { ok: true };
   } catch (err) {
-    notify('Prompt House — Failed', err.message);
+    return { ok: false, error: err.message };
   }
 }
 
@@ -160,6 +275,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'DISCORD_API') {
     handleDiscordApi(message).then(sendResponse).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.type === 'SUBMIT_PROMPT_HOUSE') {
+    submitPromptHouse(message.fields).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'SEARCH_PROMPT_HOUSE') {
+    searchPromptHouse(message.query).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'INSERT_PROMPT_HOUSE_CONTENT') {
+    insertPromptHouseContent(message).then(sendResponse);
     return true;
   }
 
