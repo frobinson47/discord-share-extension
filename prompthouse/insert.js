@@ -2,6 +2,8 @@
 
 let insertTarget = null;
 let debounceTimer = null;
+let currentPrompts = [];
+let selectedIndex = -1;
 
 document.addEventListener('DOMContentLoaded', async () => {
   const session = await chrome.storage.session.get('promptHouseInsertTarget');
@@ -14,8 +16,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     debounceTimer = setTimeout(() => runSearch(searchInput.value.trim()), 250);
   });
 
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveSelection(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveSelection(-1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const prompt = currentPrompts[selectedIndex] ?? currentPrompts[0];
+      if (prompt) handleInsert(prompt);
+    } else if (e.key === 'Escape') {
+      window.close();
+    }
+  });
+
   runSearch('');
 });
+
+function moveSelection(delta) {
+  if (!currentPrompts.length) return;
+  selectedIndex = (selectedIndex + delta + currentPrompts.length) % currentPrompts.length;
+  highlightSelection();
+}
+
+function highlightSelection() {
+  const items = document.querySelectorAll('.result-item');
+  items.forEach((item, i) => item.classList.toggle('selected', i === selectedIndex));
+  items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+}
 
 async function runSearch(query) {
   hideError();
@@ -34,6 +64,8 @@ function renderResults(prompts) {
   const list = document.getElementById('results-list');
   const empty = document.getElementById('empty-state');
   list.innerHTML = '';
+  currentPrompts = prompts;
+  selectedIndex = prompts.length ? 0 : -1;
 
   if (!prompts.length) {
     empty.classList.remove('hidden');
@@ -41,9 +73,9 @@ function renderResults(prompts) {
   }
   empty.classList.add('hidden');
 
-  for (const prompt of prompts) {
+  prompts.forEach((prompt, i) => {
     const item = document.createElement('div');
-    item.className = 'result-item';
+    item.className = 'result-item' + (i === 0 ? ' selected' : '');
     item.innerHTML = `
       <div class="result-title">${escHtml(prompt.title)}</div>
       <div class="result-meta">
@@ -52,9 +84,10 @@ function renderResults(prompts) {
       </div>
       <div class="result-preview">${escHtml((prompt.description || prompt.content || '').slice(0, 140))}</div>
     `;
+    item.addEventListener('mouseenter', () => { selectedIndex = i; highlightSelection(); });
     item.addEventListener('click', () => handleInsert(prompt));
     list.appendChild(item);
-  }
+  });
 }
 
 async function handleInsert(prompt) {

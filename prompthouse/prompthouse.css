@@ -98,7 +98,8 @@ select:focus { outline: none; border-color: #5865f2; }
   padding: 8px 10px;
   cursor: pointer;
 }
-.result-item:hover { background: #35373c; border-color: #5865f2; }
+.result-item:hover,
+.result-item.selected { background: #35373c; border-color: #5865f2; }
 
 .result-title { font-size: 13px; font-weight: 600; color: #fff; }
 .result-meta { display: flex; gap: 6px; margin: 4px 0; }
