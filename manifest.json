@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Discord Share",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Send selected text, links, and images to Discord channels",
-  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "tabs", "notifications"],
+  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "notifications"],
   "host_permissions": ["https://discord.com/api/webhooks/*", "https://discord.com/api/*", "https://prompthouse.fmrdigital.dev/*"],
   "background": {
     "service_worker": "background.js"
