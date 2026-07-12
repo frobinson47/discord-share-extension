@@ -1,5 +1,5 @@
 // background.js
-importScripts('storage.js', 'discord-api.js');
+importScripts('storage.js', 'discord-api.js', 'formatter.js');
 
 // ─── Context Menu Registration ─────────────────────────────────────────────
 
@@ -302,21 +302,11 @@ async function handleSend({ channelId, discordPayload }) {
   const found = await Storage.findChannel(channelId);
   if (!found) return { ok: false, error: 'Channel not found' };
 
-  try {
-    const res = await fetch(found.channel.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(discordPayload),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` };
-    }
-    await Storage.saveLastChannelId(channelId);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+  const result = await Formatter.postToWebhook(found.channel.webhookUrl, discordPayload);
+  if (!result.ok) return { ok: false, error: result.error.slice(0, 100) };
+
+  await Storage.saveLastChannelId(channelId);
+  return { ok: true };
 }
 
 // ─── Discord Gateway (bypasses Cloudflare HTTP blocking) ─────────────────
