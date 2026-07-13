@@ -2,3 +2,6 @@
 aar/
 .forge/
 .graymatter/
+
+# Autonomous Forge session files
+.forge/sessions/

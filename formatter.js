@@ -2,21 +2,26 @@
 // Formats payloads for the Discord webhook API.
 // Discord webhook POST body: { content: string } or { embeds: [...] }
 
+// Discord webhook `content` hard limit.
+const DISCORD_CONTENT_LIMIT = 2000;
+
 const Formatter = {
   // Text selection: plain message with code block + source info
   textSelection({ pageTitle, pageUrl, selectedText, note }) {
-    const lines = [];
-    lines.push(`📋 **${pageTitle}**`);
-    lines.push(`🔗 ${pageUrl}`);
-    lines.push('');
-    lines.push('```');
-    lines.push(selectedText);
-    lines.push('```');
-    if (note && note.trim()) {
-      lines.push('');
-      lines.push(`📝 ${note.trim()}`);
+    // A ``` sequence inside the selection would close the wrapping code
+    // block early and garble the message, so neutralize it before wrapping.
+    let body = selectedText.replace(/```/g, '`​``');
+
+    const header = `📋 **${pageTitle}**\n🔗 ${pageUrl}\n\n\`\`\`\n`;
+    const footer = '\n```' + (note && note.trim() ? `\n\n📝 ${note.trim()}` : '');
+
+    const bodyBudget = DISCORD_CONTENT_LIMIT - header.length - footer.length;
+    if (body.length > bodyBudget) {
+      const notice = '… (truncated)';
+      body = body.slice(0, Math.max(0, bodyBudget - notice.length)) + notice;
     }
-    return { content: lines.join('\n') };
+
+    return { content: header + body + footer };
   },
 
   // Link/page share: rich embed
