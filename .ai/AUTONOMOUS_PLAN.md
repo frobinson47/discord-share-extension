@@ -39,7 +39,7 @@ Notes: None.
 
 ### AUTO-002 — Remove dead content.js and unused Formatter.postToWebhook
 Priority: P2
-Status: TODO
+Status: DONE
 
 Goal: Delete dead code identified in the 2026-07-10 code health pass.
 Why it matters: `content.js`'s `CAPTURE_CONTEXT` listener is never sent by anything — background.js and popup.js both use inline `chrome.scripting.executeScript` instead — yet content.js still gets injected into every page (`matches: ["<all_urls>"]`) for no purpose. `Formatter.postToWebhook` (formatter.js:50-65) is also defined but never called; background.js's `handleSend` reimplements the same logic inline.
@@ -52,7 +52,7 @@ Notes: None.
 
 ### AUTO-003 — Narrow "tabs" permission to "activeTab"
 Priority: P2
-Status: TODO
+Status: DONE
 
 Goal: Drop the broader `"tabs"` permission from manifest.json in favor of `"activeTab"`, which already covers the extension's one actual use.
 Why it matters: manifest.json declares `"tabs"` alongside `"activeTab"`, but the only `chrome.tabs.*` call in the codebase (popup/popup.js:101, `chrome.tabs.query({ active: true, currentWindow: true })`) only ever touches the active tab, opened via a qualifying user gesture (toolbar click or context-menu action) that already grants `activeTab`. `"tabs"` exposes `url`/`title`/`pendingUrl` for every open tab and is called out more prominently on Chrome's install/update consent screen — unnecessary permission surface for a personal extension. Flagged in docs/notes/2026-07-10-code-health-pass.md iteration 2.
