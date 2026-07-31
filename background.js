@@ -20,6 +20,13 @@ async function buildContextMenus() {
     contexts: ['editable'],
   });
 
+  // Thread — send selected text, a page, or a link as a new brain-dump note
+  chrome.contextMenus.create({
+    id: 'thread-send',
+    title: 'Send to Thread',
+    contexts: ['selection', 'page', 'link'],
+  });
+
   const { servers } = await Storage.getConfig();
   if (!servers.length) return;
 
@@ -62,6 +69,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   if (info.menuItemId === 'prompthouse-insert') {
     await openPromptHouseInsert(tab, info);
+    return;
+  }
+
+  if (info.menuItemId === 'thread-send') {
+    await sendToThread(info, tab);
     return;
   }
 
@@ -169,6 +181,30 @@ async function openPromptHouseInsert(tab, info) {
     width: 420,
     height: 560,
   });
+}
+
+// ─── Thread ────────────────────────────────────────────────────────────────
+
+// Thread has no API key — its share-target route is a plain GET navigation
+// so the browser's existing Authentik session cookie carries auth, the same
+// way Thread's own desktop web-clipper integration works.
+async function sendToThread(info, tab) {
+  const config = await Storage.getThread();
+  if (!config) {
+    notify('Thread', 'Set your Thread server URL in the extension options first.');
+    return;
+  }
+
+  const title = tab?.title || '';
+  const text = (info.selectionText || '').trim();
+  const url = info.linkUrl || tab?.url || '';
+
+  const target = new URL('/share-target', config.baseUrl);
+  if (title) target.searchParams.set('title', title);
+  if (text) target.searchParams.set('text', text);
+  if (url) target.searchParams.set('url', url);
+
+  await chrome.tabs.create({ url: target.toString() });
 }
 
 async function searchPromptHouse(query) {

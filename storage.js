@@ -107,4 +107,24 @@ const Storage = {
       chrome.storage.sync.set({ promptHouse }, resolve);
     });
   },
+
+  // ─── Thread ────────────────────────────────────────────────────────────
+
+  // Returns { baseUrl } or null. No API key — Thread's share-target
+  // endpoint relies on the browser's existing Authentik session cookie.
+  async getThread() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(['thread'], (result) => {
+        const t = result.thread;
+        if (!t || !t.baseUrl) return resolve(null);
+        resolve({ baseUrl: t.baseUrl.replace(/\/+$/, '') });
+      });
+    });
+  },
+
+  async saveThread(thread) {
+    return new Promise((resolve) => {
+      chrome.storage.sync.set({ thread }, resolve);
+    });
+  },
 };

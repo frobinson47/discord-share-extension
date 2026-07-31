@@ -352,6 +352,40 @@ async function renderPromptHouseSection() {
   });
 }
 
+// ─── Thread ──────────────────────────────────────────────────────────────
+
+async function renderThreadSection() {
+  const toggle = document.getElementById('thread-toggle');
+  const body = document.getElementById('thread-body');
+  const chevron = document.getElementById('thread-chevron');
+
+  toggle.addEventListener('click', () => {
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('open');
+  });
+
+  const config = await Storage.getThread();
+  const urlInput = document.getElementById('thread-base-url');
+  if (config) urlInput.value = config.baseUrl;
+
+  document.getElementById('thread-save-btn').addEventListener('click', async () => {
+    const baseUrl = urlInput.value.trim().replace(/\/+$/, '');
+
+    if (!baseUrl) {
+      showStatus('Server URL is required.', 'error');
+      return;
+    }
+    if (!/^https?:\/\//.test(baseUrl)) {
+      showStatus('Server URL must start with http:// or https://', 'error');
+      return;
+    }
+
+    await Storage.saveThread({ baseUrl });
+    urlInput.value = baseUrl;
+    showStatus('Thread settings saved!');
+  });
+}
+
 function updateBotUI() {
   Storage.getDiscordApp().then((app) => {
     const actionsEl = document.getElementById('bot-actions');
@@ -682,6 +716,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await render();
   await renderDiscordSection();
   await renderPromptHouseSection();
+  await renderThreadSection();
 
   document.getElementById('add-server-btn').addEventListener('click', addServer);
   document.getElementById('export-btn').addEventListener('click', exportConfig);
