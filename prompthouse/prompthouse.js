@@ -28,6 +28,7 @@ async function handleSave() {
   const content = document.getElementById('ph-content').value.trim();
   const description = document.getElementById('ph-description').value.trim();
   const usageText = document.getElementById('ph-usage').value.trim();
+  const samplePrompts = document.getElementById('ph-sample-prompts').value.trim();
   const tagsText = document.getElementById('ph-tags').value.trim();
   const status = document.getElementById('ph-status').value;
   const promptType = document.getElementById('ph-type').value;
@@ -40,6 +41,7 @@ async function handleSave() {
   const fields = { title, content, status, promptType, source: 'web' };
   if (description) fields.description = description;
   if (usageText) fields.usageExamples = usageText.split('\n').map(l => l.trim()).filter(Boolean);
+  if (samplePrompts) fields.samplePrompts = samplePrompts;
   if (tagsText) fields.tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
 
   const saveBtn = document.getElementById('save-btn');
