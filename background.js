@@ -20,6 +20,13 @@ async function buildContextMenus() {
     contexts: ['editable'],
   });
 
+  // Prompt House — attach a right-clicked image to a saved prompt's reference images
+  chrome.contextMenus.create({
+    id: 'prompthouse-attach-image',
+    title: 'Attach Image to Prompt House',
+    contexts: ['image'],
+  });
+
   // Thread — send selected text, a page, or a link as a new brain-dump note
   chrome.contextMenus.create({
     id: 'thread-send',
@@ -69,6 +76,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   if (info.menuItemId === 'prompthouse-insert') {
     await openPromptHouseInsert(tab, info);
+    return;
+  }
+
+  if (info.menuItemId === 'prompthouse-attach-image') {
+    await openPromptHouseAttachImage(info);
     return;
   }
 
@@ -181,6 +193,83 @@ async function openPromptHouseInsert(tab, info) {
     width: 420,
     height: 560,
   });
+}
+
+async function openPromptHouseAttachImage(info) {
+  const config = await Storage.getPromptHouse();
+  if (!config) {
+    notify('Prompt House', 'Set your API key in the extension options first.');
+    return;
+  }
+
+  if (!info.srcUrl) {
+    notify('Prompt House', 'Could not read the image URL.');
+    return;
+  }
+
+  await chrome.storage.session.set({
+    promptHouseImageAttach: { imageUrl: info.srcUrl },
+  });
+  await chrome.windows.create({
+    url: chrome.runtime.getURL('prompthouse/attach-image.html'),
+    type: 'popup',
+    width: 420,
+    height: 560,
+  });
+}
+
+const IMAGE_SLOT_FIELDS = [
+  'referenceImagePath',
+  'referenceImagePath2',
+  'referenceImagePath3',
+  'referenceImagePath4',
+  'referenceImagePath5',
+  'referenceImagePath6',
+];
+
+async function attachPromptHouseImage({ promptId, imageUrl }) {
+  const config = await Storage.getPromptHouse();
+  if (!config) return { ok: false, error: 'Set your API key in the extension options first.' };
+
+  try {
+    const promptRes = await fetch(`${config.endpoint}/${promptId}`, {
+      headers: { 'X-Api-Key': config.apiKey },
+    });
+    if (!promptRes.ok) {
+      const text = await promptRes.text();
+      return { ok: false, error: `HTTP ${promptRes.status}: ${text.slice(0, 200)}` };
+    }
+    const prompt = await promptRes.json();
+
+    const slotIndex = IMAGE_SLOT_FIELDS.findIndex((field) => !prompt[field]);
+    if (slotIndex === -1) return { ok: false, error: 'All 6 image slots are full on that prompt.' };
+    const slot = slotIndex + 1;
+
+    const imageRes = await fetch(imageUrl);
+    if (!imageRes.ok) return { ok: false, error: `Failed to fetch image: HTTP ${imageRes.status}` };
+    const blob = await imageRes.blob();
+
+    const filename = imageUrl.split('/').pop()?.split('?')[0] || 'image';
+
+    const formData = new FormData();
+    formData.append('image', blob, filename);
+
+    const uploadRes = await fetch(`${config.endpoint}/${promptId}/image/${slot}`, {
+      method: 'POST',
+      headers: { 'X-Api-Key': config.apiKey },
+      body: formData,
+    });
+
+    if (!uploadRes.ok) {
+      const text = await uploadRes.text();
+      return { ok: false, error: `HTTP ${uploadRes.status}: ${text.slice(0, 200)}` };
+    }
+
+    notify('Prompt House', `Image attached to "${prompt.title}".`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 }
 
 // ─── Thread ────────────────────────────────────────────────────────────────
@@ -326,6 +415,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'INSERT_PROMPT_HOUSE_CONTENT') {
     insertPromptHouseContent(message).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'ATTACH_PROMPT_HOUSE_IMAGE') {
+    attachPromptHouseImage(message).then(sendResponse);
     return true;
   }
 
